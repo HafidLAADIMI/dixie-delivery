@@ -13,7 +13,16 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.almukhadram.deliveryapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "We need your location to show you nearby delivery locations",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to show you nearby  delivery locations"
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyDKkqzO1Ktr6EbmapmCv0HtqCe8_4M2AbY"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,10 +31,14 @@
       },
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyDcjrULyjm8xAF5MSi1f6hit42ZsMMW9Vg"
+          "apiKey": "AIzaSyCXkLzEQDRf-DafFdkIHLNW_bOOOQhwXfo"
         }
       },
-      "package": "com.almukhadram.deliveryapp"
+      "package": "com.almukhadram.deliveryapp",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/icon.png"
@@ -49,7 +62,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "cb95f08f-8a74-4843-9d4e-43e1d4106429"
+        "projectId": "5c690cc7-bacc-4c05-bbea-69973a182210"
       }
     }
   }
