@@ -252,7 +252,7 @@ export default function HomeScreen() {
                     <View className="mx-4 mt-4 bg-white rounded-xl overflow-hidden" style={styles.cardShadow}>
                         <Text className="text-lg font-semibold p-4 pb-2">Carte des Commandes</Text>
                         <View className="h-48 w-full">
-                            <MapView provider={PROVIDER_GOOGLE} style={{ flex: 1 }} initialRegion={region} showsUserLocation>
+                            <MapView mapType="standard" provider={PROVIDER_GOOGLE} style={{ flex: 1 }} initialRegion={region} showsUserLocation>
                                 {orders
                                     .filter(o => o.coordinates &&
                                         typeof o.coordinates.latitude === 'number' &&
