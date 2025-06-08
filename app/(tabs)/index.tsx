@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+// Fixed HomeScreen with better map error handling
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
     View,
     Text,
@@ -22,9 +23,6 @@ import { getOrders, Order } from '@/services/orderService';
 import { getDeliverymanDetails, getDeliverymanByEmail } from '@/services/deliverymanService';
 
 export default function HomeScreen() {
-    /* ------------------------------------------------------------------ */
-    /*  State                                                             */
-    /* ------------------------------------------------------------------ */
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -32,14 +30,20 @@ export default function HomeScreen() {
     const [deliveryman, setDeliveryman] = useState(null);
     const [loadingProfile, setLoadingProfile] = useState(true);
     const [error, setError] = useState(null);
+    const [mapError, setMapError] = useState(false);
+    const [mapReady, setMapReady] = useState(false);
 
-    /* context */
     const { currentLocation } = useLocation();
     const { user } = useAuth();
+    const mapRef = useRef(null);
 
-    /* ------------------------------------------------------------------ */
-    /*  Data fetch                                                         */
-    /* ------------------------------------------------------------------ */
+    // Add map error handler
+    const handleMapError = (error) => {
+        console.error('Map Error:', error);
+        setMapError(true);
+        setError('Erreur de chargement de la carte. Vérifiez votre connexion internet.');
+    };
+
     const loadData = async () => {
         setRefreshing(true);
         try {
@@ -61,36 +65,19 @@ export default function HomeScreen() {
             return;
         }
 
-        console.log('Current user data:', user);
-
         try {
             let data = null;
 
-            // Try fetching by deliverymanId first if available
             if (user.deliverymanId) {
-                console.log('Fetching details for deliverymanId:', user.deliverymanId);
                 data = await getDeliverymanDetails(user.deliverymanId);
             }
 
-            // If no data found and we have an email, try fetching by email
             if (!data && user.email) {
-                console.log('No data found by ID, trying to fetch by email:', user.email);
                 data = await getDeliverymanByEmail(user.email);
-
-                // If we found data by email but didn't have an ID before, we should
-                // update our auth context with this ID (in a real app)
-                if (data && !user.deliverymanId) {
-                    console.log('Found deliveryman by email, deliverymanId:', data.id);
-                    // You would update your auth context here
-                }
             }
 
             if (data) {
-                console.log('Deliveryman data retrieved:', data);
                 setDeliveryman(data);
-            } else {
-                console.log('No deliveryman data found for this user');
-                // We'll just use the user data we have
             }
         } catch (error) {
             console.error('Error fetching deliveryman details:', error);
@@ -105,9 +92,6 @@ export default function HomeScreen() {
         fetchDeliverymanDetails();
     }, [user]);
 
-    /* ------------------------------------------------------------------ */
-    /*  Derived stats                                                      */
-    /* ------------------------------------------------------------------ */
     const todayStr = new Date().toDateString();
     const todayCount = orders.filter((o) => {
         try {
@@ -121,9 +105,6 @@ export default function HomeScreen() {
 
     const pendingCount = orders.filter((o) => o.status === 'pending').length;
 
-    /* ------------------------------------------------------------------ */
-    /*  Helpers                                                            */
-    /* ------------------------------------------------------------------ */
     const openDetails = (o: Order) => {
         if (o && o.id) {
             router.push(`/delivery/${o.userId}_${o.id}`);
@@ -140,120 +121,157 @@ export default function HomeScreen() {
         }
     };
 
-    const region =
-        currentLocation ?? {
-            latitude: 23.7808,
-            longitude: 90.3852,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
-        };
+    // Use fallback coordinates for Morocco (Casablanca)
+    const region = currentLocation ?? {
+        latitude: 33.5731,
+        longitude: -7.5898,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+    };
 
-    /* ------------------------------------------------------------------ */
-    /*  UI                                                                 */
-    /* ------------------------------------------------------------------ */
+    if (loading) {
+        return (
+            <View className="flex-1 justify-center items-center">
+                <ActivityIndicator size="large" color={COLORS.primary.DEFAULT} />
+            </View>
+        );
+    }
+
+    // Get user data with fallbacks
+    const userData = deliveryman || user || {};
+    const fullName = (() => {
+        if (deliveryman?.firstName || deliveryman?.lastName) {
+            return `${deliveryman.firstName || ''} ${deliveryman.lastName || ''}`.trim();
+        }
+        if (user?.firstName || user?.lastName) {
+            return `${user.firstName || ''} ${user.lastName || ''}`.trim();
+        }
+        if (userData.name) {
+            return userData.name;
+        }
+        return user?.email?.split('@')[0] || 'Livreur';
+    })();
+
+    const profileImageUrl =
+        userData.profileImageUrl ||
+        userData.avatarUrl ||
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=FFA500&color=fff`;
+
     return (
         <SafeAreaView className="flex-1 bg-gray-50">
-            {loading ? (
-                <View className="flex-1 justify-center items-center">
-                    <ActivityIndicator size="large" color={COLORS.primary.DEFAULT} />
+            <ScrollView
+                className="flex-1"
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} colors={[COLORS.primary.DEFAULT]} />}
+            >
+                {/* Header */}
+                <View className="bg-white px-4 pt-4 pb-6">
+                    <View className="flex-row items-center justify-between">
+                        <View className="flex-row items-center">
+                            <Image
+                                source={{ uri: profileImageUrl }}
+                                className="w-12 h-12 rounded-full mr-3"
+                            />
+                            <View>
+                                <Text className="text-gray-900 text-lg font-semibold">
+                                    Bonjour, {fullName}
+                                </Text>
+                                <Text className="text-gray-500">
+                                    {deliveryman?.zone || user?.zone || 'Zone non définie'} • {deliveryman?.vehicle || user?.vehicle || 'Véhicule non défini'}
+                                </Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={() => router.push('/notifications')}
+                            className="w-10 h-10 bg-orange-100 rounded-full items-center justify-center"
+                        >
+                            <Feather name="bell" size={20} color={COLORS.primary.DEFAULT} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
-            ) : (
-                <ScrollView
-                    className="flex-1"
-                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadData} colors={[COLORS.primary.DEFAULT]} />}
-                >
-                    {/* header --------------------------------------------------- */}
-                    <View className="bg-white px-4 pt-4 pb-6">
+
+                {/* Display error if any */}
+                {error && (
+                    <View className="mx-4 mt-2 bg-red-100 p-3 rounded-xl">
+                        <Text className="text-red-500">{error}</Text>
+                        <TouchableOpacity
+                            onPress={() => {
+                                setError(null);
+                                setMapError(false);
+                            }}
+                            className="mt-2"
+                        >
+                            <Text className="text-red-700 font-medium">Fermer</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {/* Stats */}
+                <View className="flex-row mx-4 mt-4">
+                    <View style={[styles.card, { marginRight: 8 }]}>
+                        <Text className="text-gray-500 mb-1">Commandes du Jour</Text>
                         <View className="flex-row items-center justify-between">
-                            <View className="flex-row items-center">
-                                {/* Use data from either source, with fallbacks */}
-                                <Image
-                                    source={
-                                        // Try to get profile image from multiple possible fields
-                                        deliveryman?.profileImageUrl ?
-                                            { uri: deliveryman.profileImageUrl } :
-                                            user?.avatarUrl ?
-                                                { uri: user.avatarUrl } :
-                                                user?.profileImageUrl ?
-                                                    { uri: user.profileImageUrl } :
-                                                    require('@/assets/avatar-placeholder.png')
-                                    }
-                                    className="w-12 h-12 rounded-full mr-3"
-                                />
-                                <View>
-                                    <Text className="text-gray-900 text-lg font-semibold">
-                                        {/* Try to build full name from multiple possible sources */}
-                                        Bonjour, {(() => {
-                                        // If we have firstName and lastName in deliveryman data
-                                        if (deliveryman?.firstName || deliveryman?.lastName) {
-                                            return `${deliveryman.firstName || ''} ${deliveryman.lastName || ''}`.trim();
-                                        }
-
-                                        // If we have firstName and lastName directly in user
-                                        if (user?.firstName || user?.lastName) {
-                                            return `${user.firstName || ''} ${user.lastName || ''}`.trim();
-                                        }
-
-                                        // If we have a name field
-                                        if (user?.name) {
-                                            return user.name;
-                                        }
-
-                                        // Default
-                                        return user?.email?.split('@')[0] || 'Livreur';
-                                    })()}
-                                    </Text>
-                                    <Text className="text-gray-500">
-                                        {deliveryman?.zone || user?.zone || 'Zone non définie'} • {deliveryman?.vehicle || user?.vehicle || 'Véhicule non défini'}
-                                    </Text>
-                                </View>
+                            <Text className="text-2xl font-bold">{todayCount}</Text>
+                            <View className="w-9 h-9 bg-orange-100 rounded-full items-center justify-center">
+                                <Feather name="package" size={20} color={COLORS.primary.DEFAULT} />
                             </View>
+                        </View>
+                    </View>
 
+                    <View style={[styles.card, { marginLeft: 8 }]}>
+                        <Text className="text-gray-500 mb-1">En Attente</Text>
+                        <View className="flex-row items-center justify-between">
+                            <Text className="text-2xl font-bold">{pendingCount}</Text>
+                            <View className="w-9 h-9 bg-orange-100 rounded-full items-center justify-center">
+                                <Feather name="clock" size={20} color={COLORS.primary.DEFAULT} />
+                            </View>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Map Section */}
+                <View className="mx-4 mt-4 bg-white rounded-xl overflow-hidden" style={styles.cardShadow}>
+                    <View className="flex-row items-center justify-between p-4 pb-2">
+                        <Text className="text-lg font-semibold">Carte des Commandes</Text>
+                        {mapError && (
                             <TouchableOpacity
-                                onPress={() => router.push('/(app)/notifications')}
-                                className="w-10 h-10 bg-orange-100 rounded-full items-center justify-center"
+                                onPress={() => {
+                                    setMapError(false);
+                                    setError(null);
+                                }}
+                                className="bg-orange-500 px-3 py-1 rounded-md"
                             >
-                                <Feather name="bell" size={20} color={COLORS.primary.DEFAULT} />
+                                <Text className="text-white text-xs">Réessayer</Text>
                             </TouchableOpacity>
-                        </View>
+                        )}
                     </View>
 
-                    {/* Display error if any */}
-                    {error && (
-                        <View className="mx-4 mt-2 bg-red-100 p-3 rounded-xl">
-                            <Text className="text-red-500">{error}</Text>
+                    {mapError ? (
+                        <View className="h-48 items-center justify-center bg-gray-100">
+                            <Feather name="map-off" size={40} color="#9CA3AF" />
+                            <Text className="text-gray-500 mt-2">Carte indisponible</Text>
+                            <Text className="text-gray-400 text-sm text-center px-4">
+                                Vérifiez votre connexion internet
+                            </Text>
                         </View>
-                    )}
-
-                    {/* stats ----------------------------------------------------- */}
-                    <View className="flex-row mx-4 mt-4">
-                        <View style={[styles.card, { marginRight: 8 }]}>
-                            <Text className="text-gray-500 mb-1">Commandes du Jour</Text>
-                            <View className="flex-row items-center justify-between">
-                                <Text className="text-2xl font-bold">{todayCount}</Text>
-                                <View className="w-9 h-9 bg-orange-100 rounded-full items-center justify-center">
-                                    <Feather name="package" size={20} color={COLORS.primary.DEFAULT} />
-                                </View>
-                            </View>
-                        </View>
-
-                        <View style={[styles.card, { marginLeft: 8 }]}>
-                            <Text className="text-gray-500 mb-1">En Attente</Text>
-                            <View className="flex-row items-center justify-between">
-                                <Text className="text-2xl font-bold">{pendingCount}</Text>
-                                <View className="w-9 h-9 bg-orange-100 rounded-full items-center justify-center">
-                                    <Feather name="clock" size={20} color={COLORS.primary.DEFAULT} />
-                                </View>
-                            </View>
-                        </View>
-                    </View>
-
-                    {/* map ------------------------------------------------------- */}
-                    <View className="mx-4 mt-4 bg-white rounded-xl overflow-hidden" style={styles.cardShadow}>
-                        <Text className="text-lg font-semibold p-4 pb-2">Carte des Commandes</Text>
+                    ) : (
                         <View className="h-48 w-full">
-                            <MapView mapType="standard" provider={PROVIDER_GOOGLE} style={{ flex: 1 }} initialRegion={region} showsUserLocation>
-                                {orders
+                            <MapView
+                                ref={mapRef}
+                                provider={PROVIDER_GOOGLE}
+                                style={{ flex: 1 }}
+                                initialRegion={region}
+                                onMapReady={() => {
+                                    console.log('Map is ready!');
+                                    setMapReady(true);
+                                }}
+                                onError={handleMapError}
+                                showsUserLocation={true}
+                                loadingEnabled={!mapReady}
+                                mapType="standard"
+                                // Remove custom styles temporarily for debugging
+                            >
+                                {mapReady && orders
                                     .filter(o => o.coordinates &&
                                         typeof o.coordinates.latitude === 'number' &&
                                         typeof o.coordinates.longitude === 'number')
@@ -270,74 +288,81 @@ export default function HomeScreen() {
                                     ))
                                 }
                             </MapView>
+
+                            {!mapReady && (
+                                <View className="absolute inset-0 items-center justify-center bg-gray-100">
+                                    <ActivityIndicator size="large" color={COLORS.primary.DEFAULT} />
+                                    <Text className="text-gray-500 mt-2">Chargement de la carte...</Text>
+                                </View>
+                            )}
                         </View>
+                    )}
+                </View>
+
+                {/* Orders List Preview */}
+                <View className="mx-4 mt-4 mb-6">
+                    <View className="flex-row items-center justify-between mb-2">
+                        <Text className="text-lg font-semibold">Dernières Commandes</Text>
+                        <TouchableOpacity onPress={() => router.push('/(tabs)/deliveries')}>
+                            <Text className="text-orange-500">Voir Tout</Text>
+                        </TouchableOpacity>
                     </View>
 
-                    {/* list preview -------------------------------------------- */}
-                    <View className="mx-4 mt-4 mb-6">
-                        <View className="flex-row items-center justify-between mb-2">
-                            <Text className="text-lg font-semibold">Dernières Commandes</Text>
-                            <TouchableOpacity onPress={() => router.push('/(tabs)/deliveries')}>
-                                <Text className="text-orange-500">Voir Tout</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {orders.length ? (
-                            orders.slice(0, 5).map((o) => (
-                                <TouchableOpacity key={o.id} onPress={() => openDetails(o)} style={styles.card} className="mb-3">
-                                    <View className="flex-row justify-between items-center mb-1">
-                                        <Text className="text-gray-800 font-semibold">#{o.id}</Text>
-                                        <View
-                                            className={`px-2 py-1 rounded-full ${
+                    {orders.length ? (
+                        orders.slice(0, 5).map((o) => (
+                            <TouchableOpacity key={o.id} onPress={() => openDetails(o)} style={styles.card} className="mb-3">
+                                <View className="flex-row justify-between items-center mb-1">
+                                    <Text className="text-gray-800 font-semibold">#{o.id}</Text>
+                                    <View
+                                        className={`px-2 py-1 rounded-full ${
+                                            o.status === 'pending'
+                                                ? 'bg-yellow-100'
+                                                : o.status === 'in-progress'
+                                                    ? 'bg-blue-100'
+                                                    : o.status === 'cancelled'
+                                                        ? 'bg-red-100'
+                                                        : 'bg-green-100'
+                                        }`}
+                                    >
+                                        <Text
+                                            className={`text-xs font-medium ${
                                                 o.status === 'pending'
-                                                    ? 'bg-yellow-100'
+                                                    ? 'text-yellow-700'
                                                     : o.status === 'in-progress'
-                                                        ? 'bg-blue-100'
+                                                        ? 'text-blue-700'
                                                         : o.status === 'cancelled'
-                                                            ? 'bg-red-100'
-                                                            : 'bg-green-100'
+                                                            ? 'text-red-700'
+                                                            : 'text-green-700'
                                             }`}
                                         >
-                                            <Text
-                                                className={`text-xs font-medium ${
-                                                    o.status === 'pending'
-                                                        ? 'text-yellow-700'
-                                                        : o.status === 'in-progress'
-                                                            ? 'text-blue-700'
-                                                            : o.status === 'cancelled'
-                                                                ? 'text-red-700'
-                                                                : 'text-green-700'
-                                                }`}
-                                            >
-                                                {o.status === 'pending' ? 'En attente' :
-                                                    o.status === 'in-progress' ? 'En cours' :
-                                                        o.status === 'cancelled' ? 'Annulée' : 'Terminée'}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Text className="text-gray-800 font-medium">{o.customerName || 'Client'}</Text>
-                                    <Text className="text-gray-500 text-sm" numberOfLines={1}>
-                                        {o.address || 'Pas d\'adresse'}
-                                    </Text>
-                                    <View className="flex-row justify-between items-center mt-1">
-                                        <Text className="text-gray-600 text-xs">{o.items?.length || 0} article(s)</Text>
-                                        <Text className="text-orange-500 font-semibold">
-                                            ${typeof o.total === 'number' ? o.total.toFixed(2) : '0.00'}
+                                            {o.status === 'pending' ? 'En attente' :
+                                                o.status === 'in-progress' ? 'En cours' :
+                                                    o.status === 'cancelled' ? 'Annulée' : 'Terminée'}
                                         </Text>
                                     </View>
-                                </TouchableOpacity>
-                            ))
-                        ) : (
-                            <View style={styles.card} className="items-center">
-                                <Feather name="package" size={40} color={COLORS.gray.light} />
-                                <Text className="text-gray-500 mt-2">Aucune commande</Text>
-                            </View>
-                        )}
-                    </View>
-                </ScrollView>
-            )}
+                                </View>
+                                <Text className="text-gray-800 font-medium">{o.customerName || 'Client'}</Text>
+                                <Text className="text-gray-500 text-sm" numberOfLines={1}>
+                                    {o.address || 'Pas d\'adresse'}
+                                </Text>
+                                <View className="flex-row justify-between items-center mt-1">
+                                    <Text className="text-gray-600 text-xs">{o.items?.length || 0} article(s)</Text>
+                                    <Text className="text-orange-500 font-semibold">
+                                        {typeof o.total === 'number' ? o.total.toFixed(2) : '0.00'} MAD
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))
+                    ) : (
+                        <View style={styles.card} className="items-center">
+                            <Feather name="package" size={40} color={COLORS.gray.light} />
+                            <Text className="text-gray-500 mt-2">Aucune commande</Text>
+                        </View>
+                    )}
+                </View>
+            </ScrollView>
 
-            {/* tapped marker sheet ----------------------------------------- */}
+            {/* Tapped marker sheet */}
             {active && (
                 <View className="absolute bottom-0 left-0 right-0 bg-white rounded-t-xl p-4" style={styles.bottomShadow}>
                     <View className="flex-row justify-between items-center mb-2">
@@ -369,21 +394,21 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         padding: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: {width: 0, height: 1},
         shadowOpacity: 0.1,
         shadowRadius: 2,
         elevation: 2,
     },
     cardShadow: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
+        shadowOffset: {width: 0, height: 1},
         shadowOpacity: 0.1,
         shadowRadius: 2,
         elevation: 2,
     },
     bottomShadow: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
+        shadowOffset: {width: 0, height: -2},
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 4,

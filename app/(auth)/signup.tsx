@@ -1,5 +1,5 @@
-// app/(auth)/signup.tsx
-import React, {useState} from 'react';
+// app/(auth)/signup.tsx - Complete version with privacy
+import React, {useState, useEffect} from 'react';
 import {
     View,
     Text,
@@ -21,8 +21,17 @@ import {
 } from '@/services/deliverymanService';
 import {SafeAreaView} from "react-native-safe-area-context";
 import {StatusBar} from "expo-status-bar";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PrivacyDisclosure } from '@/components/PrivacyDisclosure';
+import { requestTrackingPermission } from '@/utils/trackingPermission';
 
-// Zones data - replace with your actual zones
+// Storage keys
+const STORAGE_KEYS = {
+    PRIVACY_ACCEPTED: '@privacy_accepted',
+    TRACKING_PERMISSION: '@tracking_permission'
+};
+
+// Zones data
 const ZONES = [
     {id: 'zone1', name: 'Central Zone'},
     {id: 'zone2', name: 'North Zone'},
@@ -47,6 +56,11 @@ const IDENTITY_TYPES = [
 ];
 
 export default function DeliverymanSignupScreen() {
+    // Privacy states
+    const [showPrivacyDisclosure, setShowPrivacyDisclosure] = useState(false);
+    const [privacyAccepted, setPrivacyAccepted] = useState(false);
+    const [isCheckingPrivacy, setIsCheckingPrivacy] = useState(true);
+
     // Form state
     const [currentStep, setCurrentStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -56,7 +70,6 @@ export default function DeliverymanSignupScreen() {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [email, setEmail] = useState('');
-    const [deliverymanType, setDeliverymanType] = useState('rider');
     const [zone, setZone] = useState('');
     const [profileImage, setProfileImage] = useState(null);
 
@@ -83,6 +96,59 @@ export default function DeliverymanSignupScreen() {
     const [showZoneDropdown, setShowZoneDropdown] = useState(false);
     const [showVehicleDropdown, setShowVehicleDropdown] = useState(false);
     const [showIdentityTypeDropdown, setShowIdentityTypeDropdown] = useState(false);
+
+    // Check privacy acceptance status on mount
+    useEffect(() => {
+        const checkPrivacyStatus = async () => {
+            try {
+                const accepted = await AsyncStorage.getItem(STORAGE_KEYS.PRIVACY_ACCEPTED);
+                if (accepted === 'true') {
+                    setPrivacyAccepted(true);
+                } else {
+                    setShowPrivacyDisclosure(true);
+                }
+            } catch (error) {
+                console.error('Error checking privacy status:', error);
+                setShowPrivacyDisclosure(true);
+            } finally {
+                setIsCheckingPrivacy(false);
+            }
+        };
+
+        checkPrivacyStatus();
+    }, []);
+
+    // Handle privacy acceptance
+    const handlePrivacyAccept = async () => {
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.PRIVACY_ACCEPTED, 'true');
+            setPrivacyAccepted(true);
+            setShowPrivacyDisclosure(false);
+
+            const hasTrackingPermission = await requestTrackingPermission();
+            await AsyncStorage.setItem(STORAGE_KEYS.TRACKING_PERMISSION, hasTrackingPermission.toString());
+
+            console.log('Privacy accepted for delivery signup, tracking permission:', hasTrackingPermission);
+        } catch (error) {
+            console.error('Error saving privacy acceptance:', error);
+            Alert.alert('Erreur', 'Impossible de sauvegarder vos préférences');
+        }
+    };
+
+    // Handle privacy decline
+    const handlePrivacyDecline = async () => {
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.PRIVACY_ACCEPTED, 'false');
+            await AsyncStorage.setItem(STORAGE_KEYS.TRACKING_PERMISSION, 'false');
+            setShowPrivacyDisclosure(false);
+            setPrivacyAccepted(true);
+
+            console.log('Privacy declined for delivery signup, no tracking permission');
+        } catch (error) {
+            console.error('Error saving privacy decline:', error);
+            Alert.alert('Erreur', 'Impossible de sauvegarder vos préférences');
+        }
+    };
 
     // Calculate age from date inputs
     const calculateAge = (birthYear, birthMonth, birthDay) => {
@@ -122,7 +188,6 @@ export default function DeliverymanSignupScreen() {
         const birthMonth = parseInt(month);
         const birthDay = parseInt(day);
 
-        // Basic validation
         if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) {
             return 'Please enter a valid date';
         }
@@ -136,7 +201,6 @@ export default function DeliverymanSignupScreen() {
             return `Day must be between 1 and ${daysInMonth} for the selected month`;
         }
 
-        // Check if at least 18 years old
         const calculatedAge = calculateAge(year, month, day);
         if (parseInt(calculatedAge) < 18) {
             return 'You must be at least 18 years old';
@@ -163,6 +227,11 @@ export default function DeliverymanSignupScreen() {
 
     // Handle next step button
     const handleNextStep = () => {
+        if (!privacyAccepted) {
+            setShowPrivacyDisclosure(true);
+            return;
+        }
+
         let error = null;
 
         switch (currentStep) {
@@ -190,6 +259,15 @@ export default function DeliverymanSignupScreen() {
     // Handle previous step button
     const handlePrevStep = () => {
         setCurrentStep(currentStep - 1);
+    };
+
+    // Navigate to login
+    const navigateToLogin = () => {
+        if (!privacyAccepted) {
+            setShowPrivacyDisclosure(true);
+            return;
+        }
+        router.push('/(auth)/login');
     };
 
     // Image picker functions
@@ -244,9 +322,12 @@ export default function DeliverymanSignupScreen() {
     };
 
     // Submit form
-
-    // Updated handleSubmit function with proper error messages - simple version
     const handleSubmit = async () => {
+        if (!privacyAccepted) {
+            setShowPrivacyDisclosure(true);
+            return;
+        }
+
         const error = validateStep4();
         if (error) {
             Alert.alert('Validation Error', error);
@@ -258,7 +339,6 @@ export default function DeliverymanSignupScreen() {
             let profileImageUrl = null;
             let identityImageUrl = null;
 
-            // Upload profile image if exists
             if (profileImage) {
                 profileImageUrl = await uploadImage(
                     profileImage,
@@ -266,7 +346,6 @@ export default function DeliverymanSignupScreen() {
                 );
             }
 
-            // Upload identity image if exists
             if (identityImage) {
                 identityImageUrl = await uploadImage(
                     identityImage,
@@ -274,7 +353,6 @@ export default function DeliverymanSignupScreen() {
                 );
             }
 
-            // Create application in Firestore
             const applicationData = {
                 firstName,
                 lastName,
@@ -288,12 +366,10 @@ export default function DeliverymanSignupScreen() {
                 birthdate: formatDate(),
                 profileImageUrl,
                 identityImageUrl,
-                status: 'inactive', // Application starts as pending
+                status: 'inactive',
             };
 
             await createDeliverymanApplication(applicationData);
-
-            // Create Firebase Auth account
             await signupWithEmail(email, password);
 
             Alert.alert(
@@ -304,7 +380,6 @@ export default function DeliverymanSignupScreen() {
         } catch (error) {
             console.error('Error during application submission:', error);
 
-            // Simple, clear error messages for different error types
             let errorMessage = 'An unexpected error occurred. Please try again.';
 
             if (error.code === 'auth/email-already-in-use') {
@@ -316,7 +391,6 @@ export default function DeliverymanSignupScreen() {
             } else if (error.message && error.message.includes('upload')) {
                 errorMessage = 'Failed to upload images. Please check your internet connection and try again.';
             } else if (error.message) {
-                // Use the actual error message if it exists
                 errorMessage = error.message;
             }
 
@@ -476,7 +550,7 @@ export default function DeliverymanSignupScreen() {
                     <Text className="text-lg font-semibold ml-2">Additional Data</Text>
                 </View>
 
-                {/* Age (will be calculated) */}
+                {/* Age (calculated) */}
                 <View className="mb-4">
                     <Text className="text-gray-700 mb-2 font-medium">Age</Text>
                     <View className="flex-row items-center border border-gray-300 rounded-xl px-4 py-2 bg-gray-100">
@@ -490,7 +564,7 @@ export default function DeliverymanSignupScreen() {
                     </View>
                 </View>
 
-                {/* Birthdate with manual inputs */}
+                {/* Birthdate */}
                 <View className="mb-4">
                     <Text className="text-gray-700 mb-2 font-medium">Birthdate</Text>
                     <View className="flex-row space-x-2">
@@ -561,18 +635,16 @@ export default function DeliverymanSignupScreen() {
                 {/* Phone */}
                 <View className="mb-4">
                     <Text className="text-gray-700 mb-2 font-medium">Phone</Text>
-                    <View className="flex-row items-center">
-                        <View className="flex-row items-center border border-gray-300 rounded-xl px-4 py-2 flex-1">
-                            <Feather name="phone" size={20} color="#9CA3AF"/>
-                            <TextInput
-                                className="flex-1 ml-2 text-gray-800"
-                                placeholder="Phone number"
-                                placeholderTextColor="#9CA3AF"
-                                keyboardType="phone-pad"
-                                value={phone}
-                                onChangeText={setPhone}
-                            />
-                        </View>
+                    <View className="flex-row items-center border border-gray-300 rounded-xl px-4 py-2">
+                        <Feather name="phone" size={20} color="#9CA3AF"/>
+                        <TextInput
+                            className="flex-1 ml-2 text-gray-800"
+                            placeholder="Phone number"
+                            placeholderTextColor="#9CA3AF"
+                            keyboardType="phone-pad"
+                            value={phone}
+                            onChangeText={setPhone}
+                        />
                     </View>
                 </View>
 
@@ -721,35 +793,31 @@ export default function DeliverymanSignupScreen() {
         );
     };
 
-    // Render progress bar
-    // Render progress bar
-    const renderProgressBar = () => {
+    // Show privacy disclosure if not accepted
+    if (showPrivacyDisclosure) {
         return (
-            <View className="flex-row justify-between mb-6">
-                {[1, 2, 3, 4].map((step) => (
-                    <View key={step} className="items-center">
-                        <View
-                            className={`w-10 h-10 rounded-full ${
-                                step <= currentStep ? 'bg-orange-500' : 'bg-gray-300'
-                            } items-center justify-center`}
-                        >
-                            {step < currentStep ? (
-                                <Feather name="check" size={20} color="white"/>
-                            ) : (
-                                <Text className="text-white font-medium">{step}</Text>
-                            )}
-                        </View>
-                        <View
-                            className={`h-1 w-12 ${
-                                step < 4 ? (step < currentStep ? 'bg-orange-500' : 'bg-gray-300') : 'bg-transparent'
-                            } ${step === 1 ? 'ml-12' : step === 4 ? 'mr-12' : ''}`}
-                            style={{position: 'absolute', left: 20, top: 20}}
-                        />
-                    </View>
-                ))}
-            </View>
+            <PrivacyDisclosure
+                visible={showPrivacyDisclosure}
+                onAccept={handlePrivacyAccept}
+                onDecline={handlePrivacyDecline}
+            />
         );
-    };
+    }
+
+    // Show loading while checking privacy status
+    if (isCheckingPrivacy) {
+        return (
+            <SafeAreaView className="flex-1 bg-gray-50 justify-center items-center">
+                <ActivityIndicator size="large" color={COLORS.primary.DEFAULT} />
+                <Text className="text-gray-500 mt-4">Chargement...</Text>
+            </SafeAreaView>
+        );
+    }
+
+    // Only show signup form after privacy is accepted
+    if (!privacyAccepted) {
+        return null;
+    }
 
     return (
         <SafeAreaView className="flex-1 bg-gray-50">
@@ -770,13 +838,40 @@ export default function DeliverymanSignupScreen() {
                         <View style={{width: 40}}/>
                     </View>
 
-                    {renderProgressBar()}
+                    {/* Progress Bar */}
+                    <View className="flex-row justify-between mb-6">
+                        {[1, 2, 3, 4].map((step) => (
+                            <View key={step} className="items-center flex-1">
+                                <View
+                                    className={`w-10 h-10 rounded-full ${
+                                        step <= currentStep ? 'bg-orange-500' : 'bg-gray-300'
+                                    } items-center justify-center`}
+                                >
+                                    {step < currentStep ? (
+                                        <Feather name="check" size={20} color="white"/>
+                                    ) : (
+                                        <Text className="text-white font-medium">{step}</Text>
+                                    )}
+                                </View>
+                                {step < 4 && (
+                                    <View
+                                        className={`h-1 flex-1 mx-2 mt-5 ${
+                                            step < currentStep ? 'bg-orange-500' : 'bg-gray-300'
+                                        }`}
+                                        style={{position: 'absolute', left: '50%', width: '100%', zIndex: -1}}
+                                    />
+                                )}
+                            </View>
+                        ))}
+                    </View>
 
+                    {/* Render current step */}
                     {currentStep === 1 && renderStep1()}
                     {currentStep === 2 && renderStep2()}
                     {currentStep === 3 && renderStep3()}
                     {currentStep === 4 && renderStep4()}
 
+                    {/* Navigation buttons */}
                     <View className="flex-row justify-between mt-4 mb-8">
                         {currentStep > 1 && (
                             <TouchableOpacity
@@ -814,6 +909,27 @@ export default function DeliverymanSignupScreen() {
                                 )}
                             </TouchableOpacity>
                         )}
+                    </View>
+
+                    {/* Login link */}
+                    <View className="flex-row justify-center mb-4">
+                        <Text className="text-gray-600">Already have an account? </Text>
+                        <TouchableOpacity onPress={navigateToLogin}>
+                            <Text className="text-orange-500 font-medium">Sign In</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Privacy Settings Link */}
+                    <View className="items-center pb-8">
+                        <TouchableOpacity
+                            onPress={() => setShowPrivacyDisclosure(true)}
+                            className="flex-row items-center"
+                        >
+                            <Feather name="shield" size={16} color="#9CA3AF" />
+                            <Text className="text-gray-500 text-sm ml-2">
+                                Paramètres de confidentialité
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>

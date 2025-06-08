@@ -1,4 +1,4 @@
-// Updated profile screen with better error handling for missing data
+// Updated profile screen with account deletion option
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -89,27 +89,25 @@ export default function ProfileScreen() {
     };
 
     const navigateToEditProfile = () => {
-        router.push('/edit-profile');
+        try {
+            router.push('/edit-profile');
+        } catch (error) {
+            console.error('Navigation error:', error);
+            Alert.alert(
+                'Erreur',
+                'Impossible d\'ouvrir la page d\'édition du profil',
+                [{ text: 'OK' }]
+            );
+        }
     };
 
     const menuItems = [
-        {
-            id: 'personal',
-            title: 'Informations Personnelles',
-            icon: 'user',
-            onPress: navigateToEditProfile,
-        },
-        {
-            id: 'payments',
-            title: 'Moyens de Paiement',
-            icon: 'credit-card',
-            onPress: () => router.push('/payment-methods'),
-        },
+
         {
             id: 'history',
             title: 'Historique de Livraisons',
             icon: 'truck',
-            onPress: () => router.push('/delivery-history'),
+            onPress: () => router.push('/deliveries'),
         },
         {
             id: 'support',
@@ -324,6 +322,37 @@ export default function ProfileScreen() {
                             <Feather name="chevron-right" size={20} color={COLORS.gray.DEFAULT} />
                         </TouchableOpacity>
                     ))}
+                </View>
+
+                {/* Account Management Section */}
+                <View className="bg-white rounded-xl mb-4" style={styles.cardShadow}>
+                    <Text className="text-gray-800 font-semibold p-4 pb-2">Gestion du compte</Text>
+
+                    <TouchableOpacity
+                        className="px-4 py-3 flex-row items-center justify-between border-b border-gray-100"
+                        onPress={() => router.push('/privacy-settings')}
+                    >
+                        <View className="flex-row items-center">
+                            <View className="w-8 h-8 bg-blue-100 rounded-full items-center justify-center mr-3">
+                                <Feather name="shield" size={16} color="#3B82F6" />
+                            </View>
+                            <Text className="text-gray-800">Paramètres de confidentialité</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color={COLORS.gray.DEFAULT} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        className="px-4 py-3 flex-row items-center justify-between"
+                        onPress={() => router.push('/delete-account')}
+                    >
+                        <View className="flex-row items-center">
+                            <View className="w-8 h-8 bg-red-100 rounded-full items-center justify-center mr-3">
+                                <Feather name="trash-2" size={16} color="#EF4444" />
+                            </View>
+                            <Text className="text-red-600 font-medium">Supprimer mon compte</Text>
+                        </View>
+                        <Feather name="chevron-right" size={20} color="#EF4444" />
+                    </TouchableOpacity>
                 </View>
 
                 {/* Logout Button */}

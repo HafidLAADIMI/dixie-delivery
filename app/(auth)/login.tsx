@@ -1,4 +1,4 @@
-// app/(auth)/login.tsx
+// app/(auth)/login.tsx - Updated with Privacy
 import React, { useState, useEffect } from 'react';
 import {
     View,
@@ -20,6 +20,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/contexts/AuthContext';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { getFirestore } from 'firebase/firestore';
+import { PrivacyDisclosure } from '@/components/PrivacyDisclosure';
+import { requestTrackingPermission } from '@/utils/trackingPermission';
+
+// Storage keys for better organization
+const STORAGE_KEYS = {
+    PRIVACY_ACCEPTED: '@privacy_accepted',
+    TRACKING_PERMISSION: '@tracking_permission'
+};
 
 // Add this function to check application status
 const checkApplicationStatus = async (email) => {
@@ -46,7 +54,6 @@ const checkApplicationStatus = async (email) => {
         };
     } catch (error) {
         console.error('Error checking application status:', error);
-        // Return null instead of throwing an error to prevent crashes
         return null;
     }
 };
@@ -59,14 +66,43 @@ export default function LoginScreen() {
     const [loading, setLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
 
+    // Privacy states
+    const [showPrivacyDisclosure, setShowPrivacyDisclosure] = useState(false);
+    const [privacyAccepted, setPrivacyAccepted] = useState(false);
+    const [isCheckingPrivacy, setIsCheckingPrivacy] = useState(true);
+
+    // Check privacy acceptance status on mount
+    useEffect(() => {
+        const checkPrivacyStatus = async () => {
+            try {
+                const accepted = await AsyncStorage.getItem(STORAGE_KEYS.PRIVACY_ACCEPTED);
+                if (accepted === 'true') {
+                    setPrivacyAccepted(true);
+                } else if (accepted === 'false') {
+                    setShowPrivacyDisclosure(true);
+                } else {
+                    setShowPrivacyDisclosure(true);
+                }
+            } catch (error) {
+                console.error('Error checking privacy status:', error);
+                setShowPrivacyDisclosure(true);
+            } finally {
+                setIsCheckingPrivacy(false);
+            }
+        };
+
+        checkPrivacyStatus();
+    }, []);
+
     // Check for stored error reasons on component mount
     useEffect(() => {
+        if (!privacyAccepted) return;
+
         const checkForErrorReason = async () => {
             try {
                 const errorReason = await AsyncStorage.getItem('authErrorReason');
                 if (errorReason) {
                     setErrorMessage(errorReason);
-                    // Clear the error once displayed
                     await AsyncStorage.removeItem('authErrorReason');
                 }
             } catch (error) {
@@ -75,7 +111,39 @@ export default function LoginScreen() {
         };
 
         checkForErrorReason();
-    }, []);
+    }, [privacyAccepted]);
+
+    // Handle privacy acceptance
+    const handlePrivacyAccept = async () => {
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.PRIVACY_ACCEPTED, 'true');
+            setPrivacyAccepted(true);
+            setShowPrivacyDisclosure(false);
+
+            const hasTrackingPermission = await requestTrackingPermission();
+            await AsyncStorage.setItem(STORAGE_KEYS.TRACKING_PERMISSION, hasTrackingPermission.toString());
+
+            console.log('Privacy accepted for delivery login, tracking permission:', hasTrackingPermission);
+        } catch (error) {
+            console.error('Error saving privacy acceptance:', error);
+            Alert.alert('Erreur', 'Impossible de sauvegarder vos préférences');
+        }
+    };
+
+    // Handle privacy decline
+    const handlePrivacyDecline = async () => {
+        try {
+            await AsyncStorage.setItem(STORAGE_KEYS.PRIVACY_ACCEPTED, 'false');
+            await AsyncStorage.setItem(STORAGE_KEYS.TRACKING_PERMISSION, 'false');
+            setShowPrivacyDisclosure(false);
+            setPrivacyAccepted(true);
+
+            console.log('Privacy declined for delivery login, no tracking permission');
+        } catch (error) {
+            console.error('Error saving privacy decline:', error);
+            Alert.alert('Erreur', 'Impossible de sauvegarder vos préférences');
+        }
+    };
 
     const validateForm = () => {
         if (!email.trim()) {
@@ -94,31 +162,33 @@ export default function LoginScreen() {
     };
 
     const handleLogin = async () => {
+        // Double-check privacy acceptance before allowing login
+        if (!privacyAccepted) {
+            setShowPrivacyDisclosure(true);
+            return;
+        }
+
         if (!validateForm()) return;
 
         setLoading(true);
         setErrorMessage('');
 
         try {
-            // Sign in with Firebase Auth
             let user;
             try {
                 user = await loginWithEmail(email, password);
 
-                // Check if user exists
                 if (!user) {
                     throw new Error('Erreur de connexion: Données utilisateur non disponibles');
                 }
             } catch (authError) {
                 console.error('Firebase auth error:', authError);
-                throw authError; // Rethrow to be caught by the outer catch block
+                throw authError;
             }
 
-            // Check if this user is a deliveryman
             const deliveryman = await getDeliverymanByEmail(email);
 
             if (!deliveryman) {
-                // Check if this is a pending application
                 const applicationStatus = await checkApplicationStatus(email);
 
                 if (applicationStatus) {
@@ -132,16 +202,13 @@ export default function LoginScreen() {
                 throw new Error('Compte non trouvé. Veuillez vous inscrire d\'abord.');
             }
 
-            // Check if the deliveryman account is active
             if (deliveryman.status !== 'active') {
                 throw new Error('Votre compte est actuellement ' + (deliveryman.status || 'inactif') + '. Veuillez contacter l\'assistance pour obtenir de l\'aide.');
             }
 
-            // User is authenticated and has an active deliveryman account
-            // Make sure all required fields exist and prepare user data object
             const userData = {
                 id: user.uid,
-                email: user.email || email, // Fallback to entered email
+                email: user.email || email,
                 deliverymanId: deliveryman.id,
                 name: `${deliveryman.firstName || ''} ${deliveryman.lastName || ''}`.trim(),
                 firstName: deliveryman.firstName || '',
@@ -155,22 +222,16 @@ export default function LoginScreen() {
                 status: deliveryman.status || 'active'
             };
 
-            // Log user data before signing in
             console.log('User data to be saved:', JSON.stringify(userData));
 
-            // Sign in with the Auth context
             await signIn(userData);
-
-            // Navigate to the main app
             router.replace('/(tabs)');
         } catch (error) {
             console.error('Login error:', error);
 
-            // Clear, user-friendly error messages
             let errorMsg = 'Échec de la connexion. Veuillez réessayer.';
 
             if (error?.code) {
-                // Handle specific Firebase Auth error codes
                 switch (error.code) {
                     case 'auth/user-not-found':
                         errorMsg = 'Compte non trouvé. Veuillez vérifier votre email ou créer un compte.';
@@ -190,24 +251,12 @@ export default function LoginScreen() {
                     case 'auth/invalid-credential':
                         errorMsg = 'Email ou mot de passe incorrect. Veuillez réessayer.';
                         break;
-                    case 'auth/account-exists-with-different-credential':
-                        errorMsg = 'Un compte existe déjà avec une autre méthode de connexion.';
-                        break;
-                    case 'auth/operation-not-allowed':
-                        errorMsg = 'Cette opération n\'est pas autorisée. Veuillez contacter l\'assistance.';
-                        break;
-                    case 'auth/requires-recent-login':
-                        errorMsg = 'Cette action nécessite une connexion récente. Veuillez vous reconnecter.';
-                        break;
                     default:
-                        // If it's another Firebase auth error but not one we've explicitly handled
                         errorMsg = 'Erreur d\'authentification. Veuillez réessayer.';
                 }
             } else if (error instanceof TypeError) {
-                // Handle TypeError specifically (like the uid undefined issue)
                 errorMsg = 'Erreur technique: Données utilisateur inaccessibles. Veuillez réessayer ou contacter l\'assistance.';
             } else if (error?.message) {
-                // Use custom error messages we've thrown ourselves
                 errorMsg = error.message;
             }
 
@@ -216,6 +265,48 @@ export default function LoginScreen() {
             setLoading(false);
         }
     };
+
+    const navigateToForgotPassword = () => {
+        if (!privacyAccepted) {
+            setShowPrivacyDisclosure(true);
+            return;
+        }
+        router.push('/(auth)/forgot-password');
+    };
+
+    const navigateToSignUp = () => {
+        if (!privacyAccepted) {
+            setShowPrivacyDisclosure(true);
+            return;
+        }
+        router.push('/(auth)/signup');
+    };
+
+    // Show privacy disclosure if not accepted
+    if (showPrivacyDisclosure) {
+        return (
+            <PrivacyDisclosure
+                visible={showPrivacyDisclosure}
+                onAccept={handlePrivacyAccept}
+                onDecline={handlePrivacyDecline}
+            />
+        );
+    }
+
+    // Show loading while checking privacy status
+    if (isCheckingPrivacy) {
+        return (
+            <SafeAreaView className="flex-1 bg-white justify-center items-center">
+                <ActivityIndicator size="large" color={COLORS.primary.DEFAULT} />
+                <Text className="text-gray-500 mt-4">Chargement...</Text>
+            </SafeAreaView>
+        );
+    }
+
+    // Only show login form after privacy is accepted
+    if (!privacyAccepted) {
+        return null;
+    }
 
     return (
         <SafeAreaView className="flex-1 bg-white">
@@ -290,7 +381,7 @@ export default function LoginScreen() {
                 {/* Forgot Password */}
                 <TouchableOpacity
                     className="items-end mb-6"
-                    onPress={() => router.push('/(auth)/forgot-password')}
+                    onPress={navigateToForgotPassword}
                 >
                     <Text className="text-orange-500">Mot de passe oublié?</Text>
                 </TouchableOpacity>
@@ -311,8 +402,21 @@ export default function LoginScreen() {
                 {/* Register Link */}
                 <View className="flex-row justify-center mt-8">
                     <Text className="text-gray-600">Vous n'avez pas de compte? </Text>
-                    <TouchableOpacity onPress={() => router.push('/(auth)/signup')}>
+                    <TouchableOpacity onPress={navigateToSignUp}>
                         <Text className="text-orange-500 font-medium">S'inscrire</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Privacy Settings Link */}
+                <View className="items-center mt-6">
+                    <TouchableOpacity
+                        onPress={() => setShowPrivacyDisclosure(true)}
+                        className="flex-row items-center"
+                    >
+                        <Feather name="shield" size={16} color="#9CA3AF" />
+                        <Text className="text-gray-500 text-sm ml-2">
+                            Paramètres de confidentialité
+                        </Text>
                     </TouchableOpacity>
                 </View>
             </View>

@@ -17,15 +17,17 @@
       "bundleIdentifier": "com.almukhadram.deliveryapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSLocationWhenInUseUsageDescription": "We need your location to show you nearby delivery locations",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to show you nearby  delivery locations"
+        "NSLocationWhenInUseUsageDescription": "This app needs your location to show you nearby delivery orders and help you navigate to customer addresses for efficient food deliveries. For example, when you're logged in as a delivery driver, we use your location to match you with orders in your area and provide turn-by-turn directions to restaurants and customers.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs your location to show you nearby delivery orders and help you navigate to customer addresses for efficient food deliveries. For example, when you're logged in as a delivery driver, we use your location to match you with orders in your area and provide turn-by-turn directions to restaurants and customers.",
+        "NSCameraUsageDescription": "This app needs camera access to take photos of completed deliveries as proof of delivery and to capture your profile picture during registration. For example, after delivering an order, you can take a photo of the delivered items at the customer's door to confirm successful delivery.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload your profile picture during driver registration and to attach photos of completed deliveries as proof of delivery. For example, you can select a profile photo from your gallery when creating your delivery driver account, or choose existing photos to document successful deliveries to customers."
       },
       "config": {
         "googleMapsApiKey": "AIzaSyDKkqzO1Ktr6EbmapmCv0HtqCe8_4M2AbY"
       }
     },
     "android": {
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
@@ -38,7 +40,9 @@
       "package": "com.almukhadram.deliveryapp",
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -47,6 +51,19 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "This app needs your location to show you nearby delivery orders and help you navigate to customer addresses for efficient food deliveries."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "This app needs access to your photo library to upload your profile picture during driver registration and to attach photos of completed deliveries as proof of delivery. For example, you can select a profile photo from your gallery when creating your delivery driver account.",
+          "cameraPermission": "This app needs camera access to take photos of completed deliveries as proof of delivery and to capture your profile picture during registration. For example, after delivering an order, you can take a photo of the delivered items at the customer's door."
+        }
+      ],
       [
         "expo-build-properties",
         {
@@ -64,6 +81,13 @@
       },
       "eas": {
         "projectId": "5c690cc7-bacc-4c05-bbea-69973a182210"
+      }
+    },
+    "submit": {
+      "production": {
+        "ios": {
+          "ascAppId": "6746369563"
+        }
       }
     }
   }
