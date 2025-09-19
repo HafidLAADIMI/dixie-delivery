@@ -1,34 +1,20 @@
-import {
-    initializeFirestore,
-    memoryLocalCache,
-
-} from 'firebase/firestore';
-import {getAuth} from 'firebase/auth';
-import {getStorage} from 'firebase/storage';
-import {initializeApp} from 'firebase/app';
+import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage";
+import { initializeApp } from "firebase/app";
 
 const firebaseConfig = {
-
-    apiKey: "AIzaSyDu3tFrjlkzvegTcfcLkBfyrLmj1B8p18k",
-
-    authDomain: "dixie-latestdb.firebaseapp.com",
-
-    projectId: "dixie-latestdb",
-
-    storageBucket: "dixie-latestdb.firebasestorage.app",
-
-    messagingSenderId: "942778815273",
-
-    appId: "1:942778815273:web:6d0ff3b4ed8edee1461d38",
-
-    measurementId: "G-HQZV2WR7VW"
-
+  apiKey: "AIzaSyA0HdeDYIv38UHICf7tsFaXWtFNG_5WUSE",
+  authDomain: "afood-a8ea4.firebaseapp.com",
+  projectId: "afood-a8ea4",
+  storageBucket: "afood-a8ea4.firebasestorage.app",
+  messagingSenderId: "555100471697",
+  appId: "1:555100471697:web:c259b06146389fa9901a30",
 };
-
 
 export const app = initializeApp(firebaseConfig);
 export const db = initializeFirestore(app, {
-    localCache: memoryLocalCache(),
+  localCache: memoryLocalCache(),
 });
 export const auth = getAuth(app);
 export const storage = getStorage(app);

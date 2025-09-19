@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "dixie-delivery",
-    "slug": "dixie-delivery",
+    "name": "Afood-delivery",
+    "slug": "Afood-delivery",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,7 +23,7 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload your profile picture during driver registration and to attach photos of completed deliveries as proof of delivery. For example, you can select a profile photo from your gallery when creating your delivery driver account, or choose existing photos to document successful deliveries to customers."
       },
       "config": {
-        "googleMapsApiKey": "AIzaSyDKkqzO1Ktr6EbmapmCv0HtqCe8_4M2AbY"
+        "googleMapsApiKey": "AIzaSyA-sjBct3sZ45E4wGLg4rVmboTuH5UgQHQ"
       }
     },
     "android": {
@@ -34,7 +34,7 @@
       },
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyCXkLzEQDRf-DafFdkIHLNW_bOOOQhwXfo"
+          "apiKey": "AIzaSyBh59DQJEXejCeQSWZM083i_x-1Fav_GXs"
         }
       },
       "package": "com.almukhadram.deliveryapp",
